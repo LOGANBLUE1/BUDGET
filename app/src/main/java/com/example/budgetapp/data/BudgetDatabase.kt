@@ -9,7 +9,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [Budget::class, Expense::class],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class BudgetDatabase : RoomDatabase() {
@@ -31,12 +31,20 @@ abstract class BudgetDatabase : RoomDatabase() {
             }
         }
 
+        /** v3 adds an optional 1..5 star rating to budgets and expenses. */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE budgets ADD COLUMN rating INTEGER")
+                db.execSQL("ALTER TABLE expenses ADD COLUMN rating INTEGER")
+            }
+        }
+
         fun get(context: Context): BudgetDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(
                 context.applicationContext,
                 BudgetDatabase::class.java,
                 "budget.db",
-            ).addMigrations(MIGRATION_1_2).build().also { instance = it }
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
         }
     }
 }

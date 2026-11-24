@@ -7,6 +7,7 @@ data class BudgetSummary(
     val limitCents: Long?,
     val currencyCode: String,
     val createdAt: Long,
+    val rating: Int?,
     val spentCents: Long,
     val expenseCount: Int,
 ) {
@@ -26,5 +27,6 @@ data class BudgetSummary(
         limitCents = limitCents,
         currencyCode = currencyCode,
         createdAt = createdAt,
+        rating = rating,
     )
 }

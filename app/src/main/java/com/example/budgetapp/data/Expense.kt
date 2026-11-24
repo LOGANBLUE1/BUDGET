@@ -20,7 +20,19 @@ import androidx.room.PrimaryKey
 data class Expense(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val budgetId: Long,
-    val title: String,
+    /** Optional: an empty string means the expense was saved with just an amount. */
+    val title: String = "",
     val amountCents: Long,
     val createdAt: Long = System.currentTimeMillis(),
-)
+    /** 1..5 stars, or null when unrated. */
+    val rating: Int? = null,
+) {
+    val hasTitle: Boolean get() = title.isNotBlank()
+
+    /** What to show for an expense that may have been saved without a name. */
+    val displayTitle: String get() = title.ifBlank { UNTITLED }
+
+    companion object {
+        const val UNTITLED = "Expense"
+    }
+}

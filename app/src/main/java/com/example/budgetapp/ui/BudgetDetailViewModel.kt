@@ -53,13 +53,15 @@ class BudgetDetailViewModel(
         initialValue = BudgetDetailUiState(),
     )
 
-    fun addExpense(title: String, amountCents: Long) {
-        viewModelScope.launch { repository.addExpense(budgetId, title.trim(), amountCents) }
+    fun addExpense(title: String, amountCents: Long, rating: Int?) {
+        viewModelScope.launch { repository.addExpense(budgetId, title.trim(), amountCents, rating) }
     }
 
-    fun updateExpense(expense: Expense, title: String, amountCents: Long) {
+    fun updateExpense(expense: Expense, title: String, amountCents: Long, rating: Int?) {
         viewModelScope.launch {
-            repository.updateExpense(expense.copy(title = title.trim(), amountCents = amountCents))
+            repository.updateExpense(
+                expense.copy(title = title.trim(), amountCents = amountCents, rating = rating)
+            )
         }
     }
 
@@ -71,10 +73,12 @@ class BudgetDetailViewModel(
         viewModelScope.launch { repository.restoreExpense(expense) }
     }
 
-    fun updateBudget(name: String, limitCents: Long?) {
+    fun updateBudget(name: String, limitCents: Long?, rating: Int?) {
         val current = uiState.value.budget ?: return
         viewModelScope.launch {
-            repository.updateBudget(current.copy(name = name.trim(), limitCents = limitCents))
+            repository.updateBudget(
+                current.copy(name = name.trim(), limitCents = limitCents, rating = rating)
+            )
         }
     }
 

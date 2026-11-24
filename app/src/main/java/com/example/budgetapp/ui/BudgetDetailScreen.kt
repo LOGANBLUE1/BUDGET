@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -87,7 +89,7 @@ fun BudgetDetailScreen(
         viewModel.deleteExpense(expense)
         scope.launch {
             val result = snackbarHostState.showSnackbar(
-                message = "Deleted \"${expense.title}\"",
+                message = "Deleted \"${expense.displayTitle}\"",
                 actionLabel = "Undo",
                 duration = SnackbarDuration.Short,
             )
@@ -168,8 +170,8 @@ fun BudgetDetailScreen(
                 title = "Add expense",
                 confirmLabel = "Add",
                 onDismiss = { showAddExpense = false },
-                onConfirm = { title, cents ->
-                    viewModel.addExpense(title, cents)
+                onConfirm = { title, cents, rating ->
+                    viewModel.addExpense(title, cents, rating)
                     showAddExpense = false
                 },
             )
@@ -181,9 +183,10 @@ fun BudgetDetailScreen(
                 confirmLabel = "Save",
                 initialTitle = target.title,
                 initialAmountCents = target.amountCents,
+                initialRating = target.rating,
                 onDismiss = { editingExpense = null },
-                onConfirm = { title, cents ->
-                    viewModel.updateExpense(target, title, cents)
+                onConfirm = { title, cents, rating ->
+                    viewModel.updateExpense(target, title, cents, rating)
                     editingExpense = null
                 },
                 onDelete = {
@@ -202,9 +205,10 @@ fun BudgetDetailScreen(
                 initialName = budgetBeingEdited.name,
                 initialLimitCents = budgetBeingEdited.limitCents,
                 initialCurrencyCode = budgetBeingEdited.currencyCode,
+                initialRating = budgetBeingEdited.rating,
                 onDismiss = { editingBudget = false },
-                onConfirm = { name, limit, _ ->
-                    viewModel.updateBudget(name, limit)
+                onConfirm = { name, limit, _, rating ->
+                    viewModel.updateBudget(name, limit, rating)
                     editingBudget = false
                 },
             )
@@ -235,7 +239,14 @@ private fun SummaryCard(state: BudgetDetailUiState) {
         ),
     ) {
         Column(Modifier.padding(20.dp)) {
-            Text("Spent", style = MaterialTheme.typography.labelLarge)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Spent", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                StarRatingDisplay(
+                    rating = state.budget?.rating,
+                    size = 18.dp,
+                    emptyTint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.35f),
+                )
+            }
             Spacer(Modifier.height(4.dp))
             Text(
                 text = formatter.format(state.spentCents),
@@ -323,16 +334,25 @@ private fun ExpenseRow(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    text = expense.title,
+                    text = expense.displayTitle,
                     style = MaterialTheme.typography.bodyLarge,
+                    color = if (expense.hasTitle) MaterialTheme.colorScheme.onSurface
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontStyle = if (expense.hasTitle) FontStyle.Normal else FontStyle.Italic,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = Dates.format(expense.createdAt),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = Dates.format(expense.createdAt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    if (expense.rating != null) {
+                        Spacer(Modifier.width(8.dp))
+                        StarRatingDisplay(rating = expense.rating, size = 12.dp)
+                    }
+                }
             }
             Text(
                 text = formatter.format(expense.amountCents),
@@ -342,7 +362,7 @@ private fun ExpenseRow(
             IconButton(onClick = onDelete) {
                 Icon(
                     imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete ${expense.title}",
+                    contentDescription = "Delete ${expense.displayTitle}",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

@@ -17,6 +17,7 @@ interface BudgetDao {
                b.limitCents AS limitCents,
                b.currencyCode AS currencyCode,
                b.createdAt AS createdAt,
+               b.rating AS rating,
                COALESCE(SUM(e.amountCents), 0) AS spentCents,
                COUNT(e.id) AS expenseCount
         FROM budgets b
@@ -32,6 +33,19 @@ interface BudgetDao {
 
     @Insert
     suspend fun insert(budget: Budget): Long
+
+    @Insert
+    suspend fun insertAll(budgets: List<Budget>)
+
+    @Query("SELECT * FROM budgets ORDER BY id")
+    suspend fun getAll(): List<Budget>
+
+    /** Expenses go with them via ON DELETE CASCADE. */
+    @Query("DELETE FROM budgets")
+    suspend fun deleteAll()
+
+    @Query("SELECT COUNT(*) FROM budgets")
+    suspend fun count(): Int
 
     @Update
     suspend fun update(budget: Budget)

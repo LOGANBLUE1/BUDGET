@@ -9,6 +9,7 @@ import androidx.navigation.navArgument
 
 object Routes {
     const val BUDGET_LIST = "budgets"
+    const val BACKUP = "backup"
     const val BUDGET_DETAIL = "budgets/{${BudgetDetailViewModel.BUDGET_ID_ARG}}"
 
     fun budgetDetail(id: Long) = "budgets/$id"
@@ -22,7 +23,11 @@ fun BudgetNavHost() {
         composable(Routes.BUDGET_LIST) {
             BudgetListScreen(
                 onOpenBudget = { id -> navController.navigate(Routes.budgetDetail(id)) },
+                onOpenBackup = { navController.navigate(Routes.BACKUP) },
             )
+        }
+        composable(Routes.BACKUP) {
+            BackupScreen(onBack = { navController.popBackStack() })
         }
         composable(
             route = Routes.BUDGET_DETAIL,
