@@ -8,7 +8,8 @@
 - Optional Google Drive backup & sync (sign in with Google, on/off switch, back up now,
   restore, restore offer on a fresh install)
 - Adds the internet permission, used only by the Drive backup
-- Database schema v2 → v4; existing data is kept
+- Database schema v2 → v4
+- Signed with a new release key: uninstall 1.0 before installing (this deletes 1.0's data)
 
 Full notes: [release-notes/v1.1.0.md](release-notes/v1.1.0.md)
 
