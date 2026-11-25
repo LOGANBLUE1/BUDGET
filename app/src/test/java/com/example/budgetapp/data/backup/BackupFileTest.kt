@@ -1,9 +1,11 @@
 package com.example.budgetapp.data.backup
 
 import com.example.budgetapp.data.Budget
+import com.example.budgetapp.data.Category
 import com.example.budgetapp.data.Expense
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BackupFileTest {
@@ -15,17 +17,22 @@ class BackupFileTest {
     private val expenses = listOf(
         Expense(id = 10, budgetId = 1, title = "Hotel", amountCents = 12_000_00, createdAt = 1_500, rating = 5),
         Expense(id = 11, budgetId = 1, title = "", amountCents = 250_00, createdAt = 1_600),
-        Expense(id = 12, budgetId = 2, title = "Bread", amountCents = 3_50, createdAt = 2_500, rating = 2),
+        Expense(id = 12, budgetId = 2, title = "Bread", amountCents = 3_50, createdAt = 2_500, rating = 2, categoryId = 7),
+    )
+    private val categories = listOf(
+        Category(id = 7, name = "Food", createdAt = 100),
+        Category(id = 8, name = "Stay", createdAt = 200),
     )
 
     @Test
     fun `round trips budgets and expenses through JSON`() {
-        val original = BackupFile.of(budgets, expenses, now = 9_999)
+        val original = BackupFile.of(budgets, expenses, categories, now = 9_999)
         val restored = BackupFile.fromJson(original.toJson())
 
         assertEquals(original, restored)
         assertEquals(budgets, restored.budgets.map { it.toEntity() })
         assertEquals(expenses, restored.expenses.map { it.toEntity() })
+        assertEquals(categories, restored.categories.map { it.toEntity() })
     }
 
     @Test
@@ -49,5 +56,7 @@ class BackupFileTest {
         assertNull(restored.budgets.single().rating)
         assertNull(restored.expenses.single().rating)
         assertEquals("Tea", restored.expenses.single().title)
+        assertNull(restored.expenses.single().categoryId)
+        assertTrue(restored.categories.isEmpty())
     }
 }

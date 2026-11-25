@@ -1,6 +1,7 @@
 package com.example.budgetapp.data.backup
 
 import com.example.budgetapp.data.Budget
+import com.example.budgetapp.data.Category
 import com.example.budgetapp.data.Expense
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -19,6 +20,8 @@ data class BackupFile(
     val exportedAt: Long,
     val budgets: List<BudgetDto>,
     val expenses: List<ExpenseDto>,
+    /** Added after the first release; older backups have none. */
+    val categories: List<CategoryDto> = emptyList(),
 ) {
     fun toJson(): String = json.encodeToString(this)
 
@@ -32,12 +35,17 @@ data class BackupFile(
 
         fun fromJson(text: String): BackupFile = json.decodeFromString(serializer(), text)
 
-        fun of(budgets: List<Budget>, expenses: List<Expense>, now: Long = System.currentTimeMillis()) =
-            BackupFile(
-                exportedAt = now,
-                budgets = budgets.map(BudgetDto::from),
-                expenses = expenses.map(ExpenseDto::from),
-            )
+        fun of(
+            budgets: List<Budget>,
+            expenses: List<Expense>,
+            categories: List<Category> = emptyList(),
+            now: Long = System.currentTimeMillis(),
+        ) = BackupFile(
+            exportedAt = now,
+            budgets = budgets.map(BudgetDto::from),
+            expenses = expenses.map(ExpenseDto::from),
+            categories = categories.map(CategoryDto::from),
+        )
     }
 }
 
@@ -72,6 +80,7 @@ data class ExpenseDto(
     val amountCents: Long,
     val createdAt: Long,
     val rating: Int? = null,
+    val categoryId: Long? = null,
 ) {
     fun toEntity() = Expense(
         id = id,
@@ -80,9 +89,24 @@ data class ExpenseDto(
         amountCents = amountCents,
         createdAt = createdAt,
         rating = rating,
+        categoryId = categoryId,
     )
 
     companion object {
-        fun from(e: Expense) = ExpenseDto(e.id, e.budgetId, e.title, e.amountCents, e.createdAt, e.rating)
+        fun from(e: Expense) =
+            ExpenseDto(e.id, e.budgetId, e.title, e.amountCents, e.createdAt, e.rating, e.categoryId)
+    }
+}
+
+@Serializable
+data class CategoryDto(
+    val id: Long,
+    val name: String,
+    val createdAt: Long,
+) {
+    fun toEntity() = Category(id = id, name = name, createdAt = createdAt)
+
+    companion object {
+        fun from(c: Category) = CategoryDto(c.id, c.name, c.createdAt)
     }
 }

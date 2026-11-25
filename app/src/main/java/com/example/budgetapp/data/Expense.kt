@@ -13,9 +13,15 @@ import androidx.room.PrimaryKey
             parentColumns = ["id"],
             childColumns = ["budgetId"],
             onDelete = ForeignKey.CASCADE,
-        )
+        ),
+        ForeignKey(
+            entity = Category::class,
+            parentColumns = ["id"],
+            childColumns = ["categoryId"],
+            onDelete = ForeignKey.SET_NULL,
+        ),
     ],
-    indices = [Index("budgetId")],
+    indices = [Index("budgetId"), Index("categoryId")],
 )
 data class Expense(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -26,6 +32,8 @@ data class Expense(
     val createdAt: Long = System.currentTimeMillis(),
     /** 1..5 stars, or null when unrated. */
     val rating: Int? = null,
+    /** Optional [Category]; null when uncategorised. */
+    val categoryId: Long? = null,
 ) {
     val hasTitle: Boolean get() = title.isNotBlank()
 

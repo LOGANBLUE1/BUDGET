@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -37,6 +39,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.budgetapp.data.Budget
+import com.example.budgetapp.data.Category
 import com.example.budgetapp.util.MoneyFormatter
 
 /**
@@ -212,14 +215,18 @@ fun ExpenseEditorDialog(
     initialTitle: String = "",
     initialAmountCents: Long? = null,
     initialRating: Int? = null,
+    initialCategoryId: Long? = null,
+    categories: List<Category>,
+    onCreateCategory: suspend (name: String) -> Long,
     onDismiss: () -> Unit,
-    onConfirm: (title: String, amountCents: Long, rating: Int?) -> Unit,
+    onConfirm: (title: String, amountCents: Long, rating: Int?, categoryId: Long?) -> Unit,
     onDelete: (() -> Unit)? = null,
 ) {
     val formatter = LocalMoneyFormatter.current
 
     var expenseTitle by remember { mutableStateOf(initialTitle) }
     var rating by remember { mutableStateOf(initialRating) }
+    var categoryId by remember { mutableStateOf(initialCategoryId) }
     var amount by remember {
         mutableStateOf(initialAmountCents?.let { formatter.toEditableString(it) } ?: "")
     }
@@ -230,14 +237,18 @@ fun ExpenseEditorDialog(
     val amountCents = formatter.parseToCents(amount)
     val amountValid = amount.isBlank() || amountCents != null
     val canConfirm = amountCents != null && amountCents > 0
-    val confirm: () -> Unit = { if (canConfirm) onConfirm(expenseTitle.trim(), amountCents ?: 0L, rating) }
+    val confirm: () -> Unit = {
+        if (canConfirm) onConfirm(expenseTitle.trim(), amountCents ?: 0L, rating, categoryId)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OutlinedTextField(
@@ -274,6 +285,12 @@ fun ExpenseEditorDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(nameFocus),
+                )
+                CategoryPicker(
+                    categories = categories,
+                    selectedId = categoryId,
+                    onSelect = { categoryId = it },
+                    onCreate = onCreateCategory,
                 )
                 RatingField(label = "Rating (optional)", rating = rating, onChange = { rating = it })
             }

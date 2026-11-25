@@ -17,11 +17,20 @@ account are needed. An **optional** Google Drive backup keeps a copy in your own
 **Inside a budget**
 - Every amount is in the budget's own currency, fixed when the budget was created
 - Summary card: total spent, limit, progress, expense count, average expense, amount left
-- Add an expense: the **amount** comes first and is the only required field. A name and a
-  1–5 ★ rating are optional. An expense without a name shows as *Expense*.
+- Add an expense: the **amount** comes first and is the only required field. A name, a
+  category and a 1–5 ★ rating are optional. An expense without a name shows as *Expense*.
+- Each expense row shows its category tag and rating, if it has them
 - Tap any expense to edit it, or delete it from the row / the edit dialog
 - Deleting an expense shows an **Undo** snackbar
 - Going over the limit turns the amounts and progress bar red
+
+**Categories** (tag icon on the Budgets screen)
+- Categories such as *Food* or *Stay* are shared by all budgets. Using one is always optional.
+- Pick a category from the chips in the expense dialog, or tap **New** to create one right
+  there. Tap the selected chip again to clear it.
+- The Categories screen lists each one with how many expenses use it, and lets you add,
+  rename or delete categories. Names are unique, ignoring case.
+- Deleting a category keeps its expenses; they just become uncategorised.
 
 **Backup & sync** (cloud icon on the Budgets screen)
 - Sign in with Google, then switch **Sync to Google Drive** on or off
@@ -39,7 +48,7 @@ account are needed. An **optional** Google Drive backup keeps a copy in your own
 | --- | --- |
 | UI | Jetpack Compose, Material 3 (dynamic color on Android 12+) |
 | State | ViewModel + StateFlow, `collectAsStateWithLifecycle` |
-| Storage | Room (schema v3), Flow-backed queries so the UI updates itself |
+| Storage | Room (schema v4), Flow-backed queries so the UI updates itself |
 | Backup | Google Identity `AuthorizationClient` + Drive REST v3, WorkManager, kotlinx.serialization |
 | Navigation | navigation-compose, two destinations |
 | Min / target SDK | 26 / 35 |
@@ -106,7 +115,9 @@ app/src/main/java/com/example/budgetapp/
 │   ├── BudgetSummary.kt        # budget + SQL aggregates for the list
 │   ├── BudgetDao.kt
 │   ├── ExpenseDao.kt
-│   ├── BudgetDatabase.kt       # v1->v2 adds currencyCode, v2->v3 adds ratings
+│   ├── Category.kt             # entity; expenses.categoryId is ON DELETE SET NULL
+│   ├── CategoryDao.kt          # + per-category expense counts
+│   ├── BudgetDatabase.kt       # v1->v2 currencyCode, v2->v3 ratings, v3->v4 categories
 │   ├── BudgetRepository.kt     # also export / replace-all for backups
 │   └── backup/
 │       ├── BackupModels.kt     # the JSON backup format
@@ -120,6 +131,8 @@ app/src/main/java/com/example/budgetapp/
 │   ├── BudgetListScreen.kt     + BudgetListViewModel.kt
 │   ├── BudgetDetailScreen.kt   + BudgetDetailViewModel.kt
 │   ├── BackupScreen.kt         + BackupViewModel.kt
+│   ├── CategoriesScreen.kt     + CategoriesViewModel.kt
+│   ├── CategoryPicker.kt       # chips + inline "New" in the expense dialog
 │   ├── Dialogs.kt              # add/edit budget, add/edit expense, confirm delete
 │   ├── StarRating.kt           # star input + read-only stars
 │   ├── CurrencyPickerDialog.kt # searchable currency list
@@ -133,5 +146,5 @@ app/src/main/java/com/example/budgetapp/
 ## Tests
 
 `./gradlew testDebugUnitTest` runs the JVM unit tests. They cover amount parsing and
-formatting across locales, the currency list, the backup JSON format (including reading
-older backups) and how untitled expenses are shown.
+formatting across locales, the currency list, the backup JSON format (including categories and
+reading older backups) and how untitled expenses are shown.

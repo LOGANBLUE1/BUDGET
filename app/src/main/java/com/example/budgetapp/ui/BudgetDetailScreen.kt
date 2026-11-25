@@ -157,6 +157,7 @@ fun BudgetDetailScreen(
                     items(state.expenses, key = { it.id }) { expense ->
                         ExpenseRow(
                             expense = expense,
+                            categoryName = state.categoryName(expense),
                             onClick = { editingExpense = expense },
                             onDelete = { deleteExpense(expense) },
                         )
@@ -169,9 +170,11 @@ fun BudgetDetailScreen(
             ExpenseEditorDialog(
                 title = "Add expense",
                 confirmLabel = "Add",
+                categories = state.categories,
+                onCreateCategory = viewModel::createCategory,
                 onDismiss = { showAddExpense = false },
-                onConfirm = { title, cents, rating ->
-                    viewModel.addExpense(title, cents, rating)
+                onConfirm = { title, cents, rating, categoryId ->
+                    viewModel.addExpense(title, cents, rating, categoryId)
                     showAddExpense = false
                 },
             )
@@ -184,9 +187,12 @@ fun BudgetDetailScreen(
                 initialTitle = target.title,
                 initialAmountCents = target.amountCents,
                 initialRating = target.rating,
+                initialCategoryId = target.categoryId,
+                categories = state.categories,
+                onCreateCategory = viewModel::createCategory,
                 onDismiss = { editingExpense = null },
-                onConfirm = { title, cents, rating ->
-                    viewModel.updateExpense(target, title, cents, rating)
+                onConfirm = { title, cents, rating, categoryId ->
+                    viewModel.updateExpense(target, title, cents, rating, categoryId)
                     editingExpense = null
                 },
                 onDelete = {
@@ -316,6 +322,7 @@ private fun Stat(label: String, value: String) {
 @Composable
 private fun ExpenseRow(
     expense: Expense,
+    categoryName: String?,
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -343,6 +350,10 @@ private fun ExpenseRow(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (categoryName != null) {
+                        CategoryTag(categoryName, modifier = Modifier.weight(1f, fill = false))
+                        Spacer(Modifier.width(8.dp))
+                    }
                     Text(
                         text = Dates.format(expense.createdAt),
                         style = MaterialTheme.typography.bodySmall,

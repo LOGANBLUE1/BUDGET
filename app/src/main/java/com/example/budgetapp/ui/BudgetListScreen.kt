@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -55,6 +56,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 fun BudgetListScreen(
     onOpenBudget: (Long) -> Unit,
     onOpenBackup: () -> Unit,
+    onOpenCategories: () -> Unit,
     viewModel: BudgetListViewModel = viewModel(factory = BudgetListViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -68,6 +70,9 @@ fun BudgetListScreen(
             TopAppBar(
                 title = { Text("Budgets") },
                 actions = {
+                    IconButton(onClick = onOpenCategories) {
+                        Icon(Icons.Outlined.Category, contentDescription = "Categories")
+                    }
                     IconButton(onClick = onOpenBackup) {
                         Icon(Icons.Default.CloudSync, contentDescription = "Backup & sync")
                     }

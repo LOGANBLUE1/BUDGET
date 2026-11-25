@@ -33,7 +33,7 @@ class BackupManager(
 
     /** Starts watching the database; call once from Application.onCreate. */
     fun start() {
-        db.invalidationTracker.addObserver(object : InvalidationTracker.Observer(arrayOf("budgets", "expenses")) {
+        db.invalidationTracker.addObserver(object : InvalidationTracker.Observer(arrayOf("budgets", "expenses", "categories")) {
             override fun onInvalidated(tables: Set<String>) {
                 if (prefs.current.syncEnabled) scheduleBackup()
             }
