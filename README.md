@@ -143,6 +143,26 @@ app/src/main/java/com/example/budgetapp/
     └── Dates.kt
 ```
 
+## Releasing
+
+Releases are built and published by GitHub Actions
+([release.yml](.github/workflows/release.yml)); no local machine is needed.
+
+1. Bump `versionCode` and `versionName` in `app/build.gradle.kts`, and add
+   `release-notes/v<version>.md` (it becomes the release description).
+2. Merge to `main`.
+3. **Actions → Release → Run workflow**, and enter the version. The workflow runs the unit
+   tests, builds and signs the APK, tags `v<version>` and publishes the release with
+   `budget-v<version>.apk` attached.
+
+Signing uses four repository secrets: `KEYSTORE_BASE64` (the `.jks`, base64 on one line),
+`KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`. **Keep a copy of the keystore and its
+passwords outside GitHub.** Secrets can't be read back, and every future update must be
+signed with the same key or phones won't accept it.
+
+Locally, a `keystore.properties` file at the project root (gitignored) does the same job
+for `./gradlew assembleRelease`.
+
 ## Tests
 
 `./gradlew testDebugUnitTest` runs the JVM unit tests. They cover amount parsing and
