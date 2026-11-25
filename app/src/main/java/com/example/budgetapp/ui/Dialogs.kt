@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -30,10 +33,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.budgetapp.data.Budget
+import com.example.budgetapp.data.Category
 import com.example.budgetapp.util.MoneyFormatter
 
 /**
@@ -51,10 +57,12 @@ fun BudgetEditorDialog(
     initialName: String = "",
     initialLimitCents: Long? = null,
     initialCurrencyCode: String = Budget.DEFAULT_CURRENCY,
+    initialRating: Int? = null,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, limitCents: Long?, currencyCode: String) -> Unit,
+    onConfirm: (name: String, limitCents: Long?, currencyCode: String, rating: Int?) -> Unit,
 ) {
     var name by remember { mutableStateOf(initialName) }
+    var rating by remember { mutableStateOf(initialRating) }
     var currencyCode by remember { mutableStateOf(initialCurrencyCode) }
     var showCurrencyPicker by remember { mutableStateOf(false) }
 
@@ -115,12 +123,14 @@ fun BudgetEditorDialog(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth(),
                 )
+
+                RatingField(label = "Overall rating (optional)", rating = rating, onChange = { rating = it })
             }
         },
         confirmButton = {
             TextButton(
                 enabled = canConfirm,
-                onClick = { onConfirm(name.trim(), limitCents, currencyCode) },
+                onClick = { onConfirm(name.trim(), limitCents, currencyCode, rating) },
             ) { Text(confirmLabel) }
         },
         dismissButton = {
@@ -194,48 +204,53 @@ private fun CurrencyLocked(formatter: MoneyFormatter) {
     }
 }
 
-/** Create / edit an expense, always in its budget's currency. [onDelete] shows when editing. */
+/**
+ * Create / edit an expense, always in its budget's currency. The amount comes first and
+ * is the only required field; the name and rating are optional. [onDelete] shows when editing.
+ */
 @Composable
 fun ExpenseEditorDialog(
     title: String,
     confirmLabel: String,
     initialTitle: String = "",
     initialAmountCents: Long? = null,
+    initialRating: Int? = null,
+    initialCategoryId: Long? = null,
+    categories: List<Category>,
+    onCreateCategory: suspend (name: String) -> Long,
     onDismiss: () -> Unit,
-    onConfirm: (title: String, amountCents: Long) -> Unit,
+    onConfirm: (title: String, amountCents: Long, rating: Int?, categoryId: Long?) -> Unit,
     onDelete: (() -> Unit)? = null,
 ) {
     val formatter = LocalMoneyFormatter.current
 
     var expenseTitle by remember { mutableStateOf(initialTitle) }
+    var rating by remember { mutableStateOf(initialRating) }
+    var categoryId by remember { mutableStateOf(initialCategoryId) }
     var amount by remember {
         mutableStateOf(initialAmountCents?.let { formatter.toEditableString(it) } ?: "")
     }
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    val amountFocus = remember { FocusRequester() }
+    val nameFocus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { amountFocus.requestFocus() }
 
     val amountCents = formatter.parseToCents(amount)
     val amountValid = amount.isBlank() || amountCents != null
-    val canConfirm = expenseTitle.isNotBlank() && amountCents != null && amountCents > 0
+    val canConfirm = amountCents != null && amountCents > 0
+    val confirm: () -> Unit = {
+        if (canConfirm) onConfirm(expenseTitle.trim(), amountCents ?: 0L, rating, categoryId)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                OutlinedTextField(
-                    value = expenseTitle,
-                    onValueChange = { expenseTitle = it },
-                    label = { Text("What was it for?") },
-                    placeholder = { Text("Coffee, bus fare…") },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .focusRequester(focusRequester),
-                )
                 OutlinedTextField(
                     value = amount,
                     onValueChange = { amount = it },
@@ -247,16 +262,41 @@ fun ExpenseEditorDialog(
                     supportingText = {
                         if (!amountValid) Text("Enter a valid amount")
                     },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Decimal,
+                        imeAction = ImeAction.Next,
+                    ),
+                    keyboardActions = KeyboardActions(onNext = { nameFocus.requestFocus() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(amountFocus),
                 )
+                OutlinedTextField(
+                    value = expenseTitle,
+                    onValueChange = { expenseTitle = it },
+                    label = { Text("Name (optional)") },
+                    placeholder = { Text("Coffee, bus fare…") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(onDone = { confirm() }),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(nameFocus),
+                )
+                CategoryPicker(
+                    categories = categories,
+                    selectedId = categoryId,
+                    onSelect = { categoryId = it },
+                    onCreate = onCreateCategory,
+                )
+                RatingField(label = "Rating (optional)", rating = rating, onChange = { rating = it })
             }
         },
         confirmButton = {
-            TextButton(
-                enabled = canConfirm,
-                onClick = { onConfirm(expenseTitle.trim(), amountCents ?: 0L) },
-            ) { Text(confirmLabel) }
+            TextButton(enabled = canConfirm, onClick = confirm) { Text(confirmLabel) }
         },
         dismissButton = {
             if (onDelete != null) {
@@ -269,10 +309,23 @@ fun ExpenseEditorDialog(
 }
 
 @Composable
+private fun RatingField(label: String, rating: Int?, onChange: (Int?) -> Unit) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        StarRatingInput(rating = rating, onChange = onChange)
+    }
+}
+
+@Composable
 fun ConfirmDialog(
     title: String,
     message: String,
     confirmLabel: String = "Delete",
+    dismissLabel: String = "Cancel",
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
@@ -284,7 +337,7 @@ fun ConfirmDialog(
             TextButton(onClick = onConfirm) { Text(confirmLabel) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(dismissLabel) }
         },
     )
 }

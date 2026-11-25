@@ -55,15 +55,15 @@ class BudgetListViewModel(private val repository: BudgetRepository) : ViewModel(
             initialValue = BudgetListUiState(),
         )
 
-    fun addBudget(name: String, limitCents: Long?, currencyCode: String) {
-        viewModelScope.launch { repository.addBudget(name.trim(), limitCents, currencyCode) }
+    fun addBudget(name: String, limitCents: Long?, currencyCode: String, rating: Int?) {
+        viewModelScope.launch { repository.addBudget(name.trim(), limitCents, currencyCode, rating) }
     }
 
-    /** Name and limit are editable after creation; the currency is not. */
-    fun editBudget(summary: BudgetSummary, name: String, limitCents: Long?) {
+    /** Name, limit and rating are editable after creation; the currency is not. */
+    fun editBudget(summary: BudgetSummary, name: String, limitCents: Long?, rating: Int?) {
         viewModelScope.launch {
             repository.updateBudget(
-                summary.toBudget().copy(name = name.trim(), limitCents = limitCents)
+                summary.toBudget().copy(name = name.trim(), limitCents = limitCents, rating = rating)
             )
         }
     }

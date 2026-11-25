@@ -16,8 +16,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Category
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -53,6 +55,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 @Composable
 fun BudgetListScreen(
     onOpenBudget: (Long) -> Unit,
+    onOpenBackup: () -> Unit,
+    onOpenCategories: () -> Unit,
     viewModel: BudgetListViewModel = viewModel(factory = BudgetListViewModel.Factory),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -62,7 +66,19 @@ fun BudgetListScreen(
     var deleting by remember { mutableStateOf<BudgetSummary?>(null) }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Budgets") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Budgets") },
+                actions = {
+                    IconButton(onClick = onOpenCategories) {
+                        Icon(Icons.Outlined.Category, contentDescription = "Categories")
+                    }
+                    IconButton(onClick = onOpenBackup) {
+                        Icon(Icons.Default.CloudSync, contentDescription = "Backup & sync")
+                    }
+                },
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { showCreate = true },
@@ -102,8 +118,8 @@ fun BudgetListScreen(
             confirmLabel = "Create",
             editing = false,
             onDismiss = { showCreate = false },
-            onConfirm = { name, limit, currency ->
-                viewModel.addBudget(name, limit, currency)
+            onConfirm = { name, limit, currency, rating ->
+                viewModel.addBudget(name, limit, currency, rating)
                 showCreate = false
             },
         )
@@ -117,9 +133,10 @@ fun BudgetListScreen(
             initialName = target.name,
             initialLimitCents = target.limitCents,
             initialCurrencyCode = target.currencyCode,
+            initialRating = target.rating,
             onDismiss = { editing = null },
-            onConfirm = { name, limit, _ ->
-                viewModel.editBudget(target, name, limit)
+            onConfirm = { name, limit, _, rating ->
+                viewModel.editBudget(target, name, limit, rating)
                 editing = null
             },
         )
@@ -202,6 +219,10 @@ private fun BudgetCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (summary.rating != null) {
+                        Spacer(Modifier.height(4.dp))
+                        StarRatingDisplay(rating = summary.rating, size = 16.dp)
+                    }
                 }
                 Box {
                     IconButton(onClick = { menuOpen = true }) {

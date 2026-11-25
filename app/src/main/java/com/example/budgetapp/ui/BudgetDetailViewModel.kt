@@ -10,6 +10,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.budgetapp.BudgetApplication
 import com.example.budgetapp.data.Budget
 import com.example.budgetapp.data.BudgetRepository
+import com.example.budgetapp.data.Category
 import com.example.budgetapp.data.Expense
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +21,7 @@ import kotlinx.coroutines.launch
 data class BudgetDetailUiState(
     val budget: Budget? = null,
     val expenses: List<Expense> = emptyList(),
+    val categories: List<Category> = emptyList(),
     val loading: Boolean = true,
 ) {
     val spentCents: Long get() = expenses.sumOf { it.amountCents }
@@ -30,6 +32,10 @@ data class BudgetDetailUiState(
         get() = budget?.limitCents?.let { limit ->
             if (limit <= 0L) null else (spentCents.toFloat() / limit.toFloat()).coerceIn(0f, 1f)
         }
+
+    private val categoryNames: Map<Long, String> by lazy { categories.associate { it.id to it.name } }
+
+    fun categoryName(expense: Expense): String? = expense.categoryId?.let(categoryNames::get)
 
     val averageCents: Long get() = if (expenses.isEmpty()) 0L else spentCents / expenses.size
 
@@ -45,23 +51,36 @@ class BudgetDetailViewModel(
     val uiState: StateFlow<BudgetDetailUiState> = combine(
         repository.observeBudget(budgetId),
         repository.observeExpenses(budgetId),
-    ) { budget, expenses ->
-        BudgetDetailUiState(budget = budget, expenses = expenses, loading = false)
+        repository.observeCategories(),
+    ) { budget, expenses, categories ->
+        BudgetDetailUiState(budget = budget, expenses = expenses, categories = categories, loading = false)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = BudgetDetailUiState(),
     )
 
-    fun addExpense(title: String, amountCents: Long) {
-        viewModelScope.launch { repository.addExpense(budgetId, title.trim(), amountCents) }
-    }
-
-    fun updateExpense(expense: Expense, title: String, amountCents: Long) {
+    fun addExpense(title: String, amountCents: Long, rating: Int?, categoryId: Long?) {
         viewModelScope.launch {
-            repository.updateExpense(expense.copy(title = title.trim(), amountCents = amountCents))
+            repository.addExpense(budgetId, title.trim(), amountCents, rating, categoryId)
         }
     }
+
+    fun updateExpense(expense: Expense, title: String, amountCents: Long, rating: Int?, categoryId: Long?) {
+        viewModelScope.launch {
+            repository.updateExpense(
+                expense.copy(
+                    title = title.trim(),
+                    amountCents = amountCents,
+                    rating = rating,
+                    categoryId = categoryId,
+                )
+            )
+        }
+    }
+
+    /** Creates (or reuses) a category by name and returns its id. */
+    suspend fun createCategory(name: String): Long = repository.addCategory(name)
 
     fun deleteExpense(expense: Expense) {
         viewModelScope.launch { repository.deleteExpense(expense) }
@@ -71,10 +90,12 @@ class BudgetDetailViewModel(
         viewModelScope.launch { repository.restoreExpense(expense) }
     }
 
-    fun updateBudget(name: String, limitCents: Long?) {
+    fun updateBudget(name: String, limitCents: Long?, rating: Int?) {
         val current = uiState.value.budget ?: return
         viewModelScope.launch {
-            repository.updateBudget(current.copy(name = name.trim(), limitCents = limitCents))
+            repository.updateBudget(
+                current.copy(name = name.trim(), limitCents = limitCents, rating = rating)
+            )
         }
     }
 

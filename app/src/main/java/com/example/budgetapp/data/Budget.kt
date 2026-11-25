@@ -19,6 +19,8 @@ data class Budget(
     @ColumnInfo(defaultValue = "INR")
     val currencyCode: String = DEFAULT_CURRENCY,
     val createdAt: Long = System.currentTimeMillis(),
+    /** Overall 1..5 star rating for the budget / trip, or null when unrated. */
+    val rating: Int? = null,
 ) {
     companion object {
         const val DEFAULT_CURRENCY = "INR"

@@ -16,6 +16,12 @@ interface ExpenseDao {
     @Insert
     suspend fun insert(expense: Expense): Long
 
+    @Insert
+    suspend fun insertAll(expenses: List<Expense>)
+
+    @Query("SELECT * FROM expenses ORDER BY id")
+    suspend fun getAll(): List<Expense>
+
     @Update
     suspend fun update(expense: Expense)
 
