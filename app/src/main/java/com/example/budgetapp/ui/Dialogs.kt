@@ -15,7 +15,13 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -32,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -40,7 +47,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.budgetapp.data.Budget
 import com.example.budgetapp.data.Category
+import com.example.budgetapp.util.Dates
 import com.example.budgetapp.util.MoneyFormatter
+import java.time.LocalDate
 
 /**
  * Create or edit a budget.
@@ -206,7 +215,8 @@ private fun CurrencyLocked(formatter: MoneyFormatter) {
 
 /**
  * Create / edit an expense, always in its budget's currency. The amount comes first and
- * is the only required field; the name and rating are optional. [onDelete] shows when editing.
+ * is the only required field; the name, category, rating and date are optional. The date
+ * defaults to now; only the day can be changed. [onDelete] shows when editing.
  */
 @Composable
 fun ExpenseEditorDialog(
@@ -216,10 +226,11 @@ fun ExpenseEditorDialog(
     initialAmountCents: Long? = null,
     initialRating: Int? = null,
     initialCategoryId: Long? = null,
+    initialCreatedAt: Long? = null,
     categories: List<Category>,
     onCreateCategory: suspend (name: String) -> Long,
     onDismiss: () -> Unit,
-    onConfirm: (title: String, amountCents: Long, rating: Int?, categoryId: Long?) -> Unit,
+    onConfirm: (title: String, amountCents: Long, rating: Int?, categoryId: Long?, createdAt: Long) -> Unit,
     onDelete: (() -> Unit)? = null,
 ) {
     val formatter = LocalMoneyFormatter.current
@@ -230,15 +241,33 @@ fun ExpenseEditorDialog(
     var amount by remember {
         mutableStateOf(initialAmountCents?.let { formatter.toEditableString(it) } ?: "")
     }
+    // Fixed when the dialog opens, so "today" and the original time stay consistent.
+    val openedAt = remember { System.currentTimeMillis() }
+    val originalCreatedAt = initialCreatedAt ?: openedAt
+    var day by remember { mutableStateOf(Dates.localDate(originalCreatedAt)) }
+    var showDatePicker by remember { mutableStateOf(false) }
+
     val amountFocus = remember { FocusRequester() }
     val nameFocus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { amountFocus.requestFocus() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) {
+        amountFocus.requestFocus()
+        keyboard?.show()
+    }
 
     val amountCents = formatter.parseToCents(amount)
     val amountValid = amount.isBlank() || amountCents != null
     val canConfirm = amountCents != null && amountCents > 0
     val confirm: () -> Unit = {
-        if (canConfirm) onConfirm(expenseTitle.trim(), amountCents ?: 0L, rating, categoryId)
+        if (canConfirm) {
+            onConfirm(
+                expenseTitle.trim(),
+                amountCents ?: 0L,
+                rating,
+                categoryId,
+                Dates.timestampForDay(day, original = originalCreatedAt, now = System.currentTimeMillis()),
+            )
+        }
     }
 
     AlertDialog(
@@ -286,6 +315,7 @@ fun ExpenseEditorDialog(
                         .fillMaxWidth()
                         .focusRequester(nameFocus),
                 )
+                DateField(day = day, onClick = { showDatePicker = true })
                 CategoryPicker(
                     categories = categories,
                     selectedId = categoryId,
@@ -306,6 +336,77 @@ fun ExpenseEditorDialog(
             }
         },
     )
+
+    if (showDatePicker) {
+        ExpenseDatePicker(
+            day = day,
+            onDismiss = { showDatePicker = false },
+            onPick = {
+                day = it
+                showDatePicker = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun DateField(day: LocalDate, onClick: () -> Unit) {
+    val today = LocalDate.now()
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = "Date",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = when (day) {
+                        today -> "Today"
+                        today.minusDays(1) -> "Yesterday"
+                        else -> Dates.formatDay(day)
+                    },
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+            Icon(Icons.Outlined.CalendarMonth, contentDescription = "Change date")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExpenseDatePicker(day: LocalDate, onDismiss: () -> Unit, onPick: (LocalDate) -> Unit) {
+    val todayUtc = remember { Dates.toPickerMillis(LocalDate.now()) }
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = Dates.toPickerMillis(day),
+        // Expenses are things that already happened, so future days can't be picked.
+        selectableDates = object : SelectableDates {
+            override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis <= todayUtc
+            override fun isSelectableYear(year: Int) = year <= LocalDate.now().year
+        },
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                enabled = state.selectedDateMillis != null,
+                onClick = { state.selectedDateMillis?.let { onPick(Dates.fromPickerMillis(it)) } },
+            ) { Text("OK") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    ) {
+        DatePicker(state = state)
+    }
 }
 
 @Composable

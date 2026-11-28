@@ -18,6 +18,7 @@ interface BudgetDao {
                b.currencyCode AS currencyCode,
                b.createdAt AS createdAt,
                b.rating AS rating,
+               b.closedAt AS closedAt,
                COALESCE(SUM(e.amountCents), 0) AS spentCents,
                COUNT(e.id) AS expenseCount
         FROM budgets b
@@ -30,6 +31,9 @@ interface BudgetDao {
 
     @Query("SELECT * FROM budgets WHERE id = :id")
     fun observeBudget(id: Long): Flow<Budget?>
+
+    @Query("SELECT * FROM budgets WHERE id = :id")
+    suspend fun getById(id: Long): Budget?
 
     @Insert
     suspend fun insert(budget: Budget): Long
@@ -49,6 +53,10 @@ interface BudgetDao {
 
     @Update
     suspend fun update(budget: Budget)
+
+    /** Closes the budget when [closedAt] is a time, re-opens it when null. */
+    @Query("UPDATE budgets SET closedAt = :closedAt WHERE id = :id")
+    suspend fun setClosedAt(id: Long, closedAt: Long?)
 
     @Delete
     suspend fun delete(budget: Budget)

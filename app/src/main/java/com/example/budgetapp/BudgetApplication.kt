@@ -6,6 +6,7 @@ import com.example.budgetapp.data.BudgetRepository
 import com.example.budgetapp.data.backup.BackupManager
 import com.example.budgetapp.data.backup.GoogleAuth
 import com.example.budgetapp.data.backup.SyncPrefs
+import com.example.budgetapp.ui.QuickAddShortcut
 
 class BudgetApplication : Application() {
 
@@ -16,6 +17,8 @@ class BudgetApplication : Application() {
     val syncPrefs: SyncPrefs by lazy { SyncPrefs(this) }
 
     val googleAuth: GoogleAuth by lazy { GoogleAuth(this) }
+
+    val quickAdd: QuickAddShortcut by lazy { QuickAddShortcut(this) }
 
     val backupManager: BackupManager by lazy {
         BackupManager(this, database, repository, syncPrefs, googleAuth)

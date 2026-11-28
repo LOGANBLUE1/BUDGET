@@ -1,6 +1,15 @@
 package com.example.budgetapp.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.Color
+import com.example.budgetapp.data.CategorySpend
+import kotlin.math.roundToInt
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -20,6 +29,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.automirrored.outlined.ReceiptLong
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -36,6 +47,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -79,6 +91,18 @@ fun BudgetDetailScreen(
     var editingExpense by remember { mutableStateOf<Expense?>(null) }
     var editingBudget by remember { mutableStateOf(false) }
     var confirmDeleteBudget by remember { mutableStateOf(false) }
+    var confirmCloseBudget by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
+
+    // From the launcher shortcut: open Add expense once, as soon as the budget has loaded.
+    var autoAddDone by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(state.budget) {
+        val budget = state.budget ?: return@LaunchedEffect
+        if (viewModel.openAddExpense && !autoAddDone) {
+            autoAddDone = true
+            if (!budget.isClosed) showAddExpense = true
+        }
+    }
 
     // The budget row is gone (deleted here or elsewhere) — leave the screen.
     LaunchedEffect(state.deleted) {
@@ -116,22 +140,52 @@ fun BudgetDetailScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { editingBudget = true }) {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit budget")
+                        if (state.isClosed) {
+                            IconButton(onClick = viewModel::reopenBudget) {
+                                Icon(Icons.Outlined.LockOpen, contentDescription = "Re-open budget")
+                            }
+                        } else {
+                            IconButton(onClick = { editingBudget = true }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit budget")
+                            }
                         }
-                        IconButton(onClick = { confirmDeleteBudget = true }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Delete budget")
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "More options")
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                if (!state.isClosed) {
+                                    DropdownMenuItem(
+                                        text = { Text("Close budget") },
+                                        leadingIcon = { Icon(Icons.Outlined.Lock, contentDescription = null) },
+                                        onClick = {
+                                            menuOpen = false
+                                            confirmCloseBudget = true
+                                        },
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("Delete budget") },
+                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                                    onClick = {
+                                        menuOpen = false
+                                        confirmDeleteBudget = true
+                                    },
+                                )
+                            }
                         }
                     },
                 )
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
             floatingActionButton = {
-                ExtendedFloatingActionButton(
-                    onClick = { showAddExpense = true },
-                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("Add expense") },
-                )
+                if (!state.loading && !state.isClosed) {
+                    ExtendedFloatingActionButton(
+                        onClick = { showAddExpense = true },
+                        icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                        text = { Text("Add expense") },
+                    )
+                }
             },
         ) { padding ->
             LazyColumn(
@@ -141,23 +195,39 @@ fun BudgetDetailScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                state.budget?.closedAt?.let { closedAt ->
+                    item(key = "closed") {
+                        ClosedBanner(closedAt = closedAt, onReopen = viewModel::reopenBudget)
+                    }
+                }
                 item(key = "summary") { SummaryCard(state) }
 
-                if (state.expenses.isEmpty()) {
-                    item(key = "empty") { EmptyExpenses() }
-                } else {
-                    item(key = "header") {
-                        Text(
-                            text = "Expenses",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp),
+                if (state.showBreakdown) {
+                    item(key = "breakdown") {
+                        CategoryBreakdownCard(
+                            breakdown = state.breakdown,
+                            selected = state.filter,
+                            onSelect = viewModel::toggleFilter,
                         )
                     }
-                    items(state.expenses, key = { it.id }) { expense ->
+                }
+
+                if (state.expenses.isEmpty()) {
+                    item(key = "empty") { EmptyExpenses(closed = state.isClosed) }
+                } else {
+                    item(key = "header") {
+                        ExpensesHeader(
+                            filterName = state.filterName,
+                            shown = state.visibleExpenses.size,
+                            total = state.expenses.size,
+                            onClear = viewModel::clearFilter,
+                        )
+                    }
+                    items(state.visibleExpenses, key = { it.id }) { expense ->
                         ExpenseRow(
                             expense = expense,
                             categoryName = state.categoryName(expense),
+                            readOnly = state.isClosed,
                             onClick = { editingExpense = expense },
                             onDelete = { deleteExpense(expense) },
                         )
@@ -173,8 +243,8 @@ fun BudgetDetailScreen(
                 categories = state.categories,
                 onCreateCategory = viewModel::createCategory,
                 onDismiss = { showAddExpense = false },
-                onConfirm = { title, cents, rating, categoryId ->
-                    viewModel.addExpense(title, cents, rating, categoryId)
+                onConfirm = { title, cents, rating, categoryId, createdAt ->
+                    viewModel.addExpense(title, cents, rating, categoryId, createdAt)
                     showAddExpense = false
                 },
             )
@@ -188,11 +258,12 @@ fun BudgetDetailScreen(
                 initialAmountCents = target.amountCents,
                 initialRating = target.rating,
                 initialCategoryId = target.categoryId,
+                initialCreatedAt = target.createdAt,
                 categories = state.categories,
                 onCreateCategory = viewModel::createCategory,
                 onDismiss = { editingExpense = null },
-                onConfirm = { title, cents, rating, categoryId ->
-                    viewModel.updateExpense(target, title, cents, rating, categoryId)
+                onConfirm = { title, cents, rating, categoryId, createdAt ->
+                    viewModel.updateExpense(target, title, cents, rating, categoryId, createdAt)
                     editingExpense = null
                 },
                 onDelete = {
@@ -220,6 +291,20 @@ fun BudgetDetailScreen(
             )
         }
 
+        if (confirmCloseBudget) {
+            ConfirmDialog(
+                title = "Close this budget?",
+                message = "It moves to the Closed tab with its expenses, and can't be changed " +
+                    "until you re-open it.",
+                confirmLabel = "Close",
+                onDismiss = { confirmCloseBudget = false },
+                onConfirm = {
+                    confirmCloseBudget = false
+                    viewModel.closeBudget()
+                },
+            )
+        }
+
         if (confirmDeleteBudget) {
             ConfirmDialog(
                 title = "Delete this budget?",
@@ -230,6 +315,121 @@ fun BudgetDetailScreen(
                     viewModel.deleteBudget()
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun CategoryBreakdownCard(
+    breakdown: List<CategorySpend>,
+    selected: CategoryFilter?,
+    onSelect: (Long?) -> Unit,
+) {
+    val formatter = LocalMoneyFormatter.current
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(vertical = 12.dp)) {
+            Text(
+                text = "By category",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            Text(
+                text = "Tap one to show only its expenses",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+            Spacer(Modifier.height(4.dp))
+            breakdown.forEach { line ->
+                val isSelected = selected != null && selected.categoryId == line.categoryId
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onSelect(line.categoryId) }
+                        .background(
+                            if (isSelected) MaterialTheme.colorScheme.secondaryContainer
+                            else Color.Transparent
+                        )
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = line.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                            fontStyle = if (line.categoryId == null) FontStyle.Italic else FontStyle.Normal,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            text = "${(line.share * 100).roundToInt()}%",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = formatter.format(line.spentCents),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { line.share },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp)),
+                        drawStopIndicator = {},
+                        gapSize = 0.dp,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ExpensesHeader(filterName: String?, shown: Int, total: Int, onClear: () -> Unit) {
+    Row(
+        modifier = Modifier.padding(top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = if (filterName == null) "Expenses" else "$filterName · $shown of $total expenses",
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (filterName != null) {
+            TextButton(onClick = onClear) { Text("Show all") }
+        }
+    }
+}
+
+@Composable
+private fun ClosedBanner(closedAt: Long, onReopen: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        ),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Outlined.Lock, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Closed", style = MaterialTheme.typography.titleSmall)
+                Text(Dates.format(closedAt), style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton(onClick = onReopen) { Text("Re-open") }
         }
     }
 }
@@ -323,6 +523,7 @@ private fun Stat(label: String, value: String) {
 private fun ExpenseRow(
     expense: Expense,
     categoryName: String?,
+    readOnly: Boolean,
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -330,7 +531,7 @@ private fun ExpenseRow(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(enabled = !readOnly, onClick = onClick),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
         ),
@@ -355,7 +556,7 @@ private fun ExpenseRow(
                         Spacer(Modifier.width(8.dp))
                     }
                     Text(
-                        text = Dates.format(expense.createdAt),
+                        text = Dates.formatDay(expense.createdAt),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -370,19 +571,23 @@ private fun ExpenseRow(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
-            IconButton(onClick = onDelete) {
-                Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Delete ${expense.displayTitle}",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            if (readOnly) {
+                Spacer(Modifier.width(12.dp))
+            } else {
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete ${expense.displayTitle}",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun EmptyExpenses() {
+private fun EmptyExpenses(closed: Boolean) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -399,7 +604,7 @@ private fun EmptyExpenses() {
         Text("No expenses yet", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
         Text(
-            text = "Tap Add expense to record your first one.",
+            text = if (closed) "Re-open the budget to add expenses." else "Tap Add expense to record your first one.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

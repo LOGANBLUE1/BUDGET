@@ -1,8 +1,10 @@
 package com.example.budgetapp.ui
 
 import android.app.Activity
+import android.content.ContentResolver
 import android.content.Intent
 import android.content.IntentSender
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -10,6 +12,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.budgetapp.BudgetApplication
 import com.example.budgetapp.data.BudgetRepository
+import com.example.budgetapp.data.backup.BackupFile
 import com.example.budgetapp.data.backup.BackupManager
 import com.example.budgetapp.data.backup.GoogleAuth
 import com.example.budgetapp.data.backup.NeedsSignInException
@@ -17,6 +20,7 @@ import com.example.budgetapp.data.backup.SyncPrefs
 import com.example.budgetapp.data.backup.SyncState
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.CommonStatusCodes
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -26,21 +30,31 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerializationException
 import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
 
 /** A Drive backup exists but this device has no data. Offer to bring it back. */
 data class RestoreOffer(val backupTime: Long, val enableSyncAfter: Boolean)
 
+/** A backup file was picked and read; waiting for the user to confirm replacing everything. */
+data class PendingImport(val backup: BackupFile) {
+    val budgetCount: Int get() = backup.budgets.size
+    val expenseCount: Int get() = backup.expenses.size
+}
+
 data class BackupUiState(
     val sync: SyncState = SyncState(),
     val busy: Boolean = false,
     val restoreOffer: RestoreOffer? = null,
+    val pendingImport: PendingImport? = null,
 )
 
 private data class Transient(
     val busy: Boolean = false,
     val restoreOffer: RestoreOffer? = null,
+    val pendingImport: PendingImport? = null,
 )
 
 class BackupViewModel(
@@ -48,12 +62,13 @@ class BackupViewModel(
     private val prefs: SyncPrefs,
     private val auth: GoogleAuth,
     private val backups: BackupManager,
+    private val files: ContentResolver,
 ) : ViewModel() {
 
     private val transient = MutableStateFlow(Transient())
 
     val uiState: StateFlow<BackupUiState> = combine(prefs.state, transient) { sync, t ->
-        BackupUiState(sync = sync, busy = t.busy, restoreOffer = t.restoreOffer)
+        BackupUiState(sync = sync, busy = t.busy, restoreOffer = t.restoreOffer, pendingImport = t.pendingImport)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BackupUiState(sync = prefs.current))
 
     private val _consentRequests = Channel<IntentSender>(Channel.BUFFERED)
@@ -142,6 +157,48 @@ class BackupViewModel(
         )
     }
 
+    /** Writes the same JSON the Drive backup uses to a file the user picked. */
+    fun exportToFile(uri: Uri) = launchBusy {
+        val backup = repository.exportBackup()
+        withContext(Dispatchers.IO) {
+            val out = files.openOutputStream(uri, "wt") ?: throw FileException("Couldn't open that file")
+            out.bufferedWriter().use { it.write(backup.toJson()) }
+        }
+        _messages.send(
+            "Exported ${backup.budgets.size} budget" + (if (backup.budgets.size == 1) "" else "s") +
+                " and ${backup.expenses.size} expense" + (if (backup.expenses.size == 1) "" else "s")
+        )
+    }
+
+    /** Reads a backup file and asks for confirmation before replacing anything. */
+    fun readImportFile(uri: Uri) = launchBusy {
+        val backup = withContext(Dispatchers.IO) {
+            val text = files.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                ?: throw FileException("Couldn't open that file")
+            try {
+                BackupFile.fromJson(text)
+            } catch (e: SerializationException) {
+                throw FileException("That file isn't a Budget backup")
+            } catch (e: IllegalArgumentException) {
+                throw FileException("That file isn't a Budget backup")
+            }
+        }
+        transient.update { it.copy(pendingImport = PendingImport(backup)) }
+    }
+
+    fun confirmImport() {
+        val pending = transient.value.pendingImport ?: return
+        transient.update { it.copy(pendingImport = null) }
+        launchBusy {
+            repository.replaceAll(pending.backup)
+            _messages.send("Imported ${pending.budgetCount} budget" + if (pending.budgetCount == 1) "" else "s")
+        }
+    }
+
+    fun cancelImport() {
+        transient.update { it.copy(pendingImport = null) }
+    }
+
     fun signOut() = launchBusy {
         backups.cancelScheduled()
         auth.revoke()
@@ -174,6 +231,7 @@ class BackupViewModel(
             CommonStatusCodes.NETWORK_ERROR -> "No internet connection"
             else -> "Google sign-in failed (code ${e.statusCode})"
         }
+        is FileException -> e.message ?: "Couldn't use that file"
         is IOException -> "Couldn't reach Google Drive. Check your connection."
         else -> e.message ?: "Something went wrong"
     }
@@ -182,8 +240,11 @@ class BackupViewModel(
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[ViewModelProvider.AndroidViewModelFactory.APPLICATION_KEY] as BudgetApplication
-                BackupViewModel(app.repository, app.syncPrefs, app.googleAuth, app.backupManager)
+                BackupViewModel(app.repository, app.syncPrefs, app.googleAuth, app.backupManager, app.contentResolver)
             }
         }
     }
 }
+
+/** A problem with a picked file, with a message fit to show as is. */
+private class FileException(message: String) : IOException(message)

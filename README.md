@@ -7,22 +7,34 @@ account are needed. An **optional** Google Drive backup keeps a copy in your own
 ## What it does
 
 **Budgets list**
+- Two tabs: **Live** on the left and **Closed** on the right. Tap a tab or swipe between them.
 - Create a budget with a name, a currency, an optional spending limit and an optional
   overall ★ rating (handy for rating a whole trip)
 - Each card shows its star rating, total spent, the limit, a progress bar and what's left (or how far over)
 - A card at the top totals spending — one line per currency, since budgets in different
   currencies can't be added together
 - Edit or delete a budget from the ⋮ menu (deleting removes its expenses too)
+- A **+** on each live budget card adds an expense without opening the budget
+- **Close** a budget you're done with (⋮ menu, or the lock icon inside it). It moves to the
+  Closed tab with its expenses and becomes read-only. **Re-open** it from the same menu or
+  from the banner inside it. Both show an **Undo** snackbar. Each tab has its own totals card.
 
 **Inside a budget**
 - Every amount is in the budget's own currency, fixed when the budget was created
 - Summary card: total spent, limit, progress, expense count, average expense, amount left
-- Add an expense: the **amount** comes first and is the only required field. A name, a
-  category and a 1–5 ★ rating are optional. An expense without a name shows as *Expense*.
+- Add an expense: the **amount** comes first, with the number keyboard already open, and
+  is the only required field. A name, a category, a 1–5 ★ rating and a **date** are optional.
+  The date is today unless you pick an earlier day. An expense without a name shows as *Expense*.
+- **By category** card: what share of the budget went to each category. Tap one to show only
+  its expenses; **Show all** clears the filter.
 - Each expense row shows its category tag and rating, if it has them
 - Tap any expense to edit it, or delete it from the row / the edit dialog
 - Deleting an expense shows an **Undo** snackbar
 - Going over the limit turns the amounts and progress bar red
+
+**Launcher shortcut**
+- Long-press the app icon → **Add expense** opens the Add expense dialog in the budget you
+  last added to (or the budget list if that budget is now closed or deleted)
 
 **Categories** (tag icon on the Budgets screen)
 - Categories such as *Food* or *Stay* are shared by all budgets. Using one is always optional.
@@ -41,6 +53,9 @@ account are needed. An **optional** Google Drive backup keeps a copy in your own
 - The backup is one JSON file in Drive's hidden *app data* folder. The app only asks for
   the `drive.appdata` scope, so it can't see any of your other Drive files.
 - An empty phone never overwrites an existing backup, so reinstalling can't wipe it
+- **Backup file**: **Export** saves the same JSON to a file you choose; **Import** loads one
+  and replaces everything on the phone (after a confirmation showing what's in it). No
+  sign-in needed.
 
 ## Tech
 
@@ -48,7 +63,7 @@ account are needed. An **optional** Google Drive backup keeps a copy in your own
 | --- | --- |
 | UI | Jetpack Compose, Material 3 (dynamic color on Android 12+) |
 | State | ViewModel + StateFlow, `collectAsStateWithLifecycle` |
-| Storage | Room (schema v4), Flow-backed queries so the UI updates itself |
+| Storage | Room (schema v5), Flow-backed queries so the UI updates itself |
 | Backup | Google Identity `AuthorizationClient` + Drive REST v3, WorkManager, kotlinx.serialization |
 | Navigation | navigation-compose, two destinations |
 | Min / target SDK | 26 / 35 |
@@ -98,6 +113,11 @@ press Run.
 
 From the command line, with `ANDROID_HOME` set and a device or emulator connected:
 
+The debug build installs as **Budget (debug)** (`com.example.budgetapp.debug`), next to the
+release app rather than over it, so testing never needs the release app uninstalled. It starts
+with its own empty data, and Google sign-in doesn't work in it unless an OAuth client is
+registered for that package.
+
 ```sh
 ./gradlew installDebug     # build and install
 ./gradlew assembleDebug    # just build the APK
@@ -110,14 +130,15 @@ app/src/main/java/com/example/budgetapp/
 ├── BudgetApplication.kt        # owns the database + repository
 ├── MainActivity.kt
 ├── data/
-│   ├── Budget.kt               # entity, owns the currency
+│   ├── Budget.kt               # entity, owns the currency; closedAt != null = closed
 │   ├── Expense.kt              # entity, CASCADE-deleted with its budget
 │   ├── BudgetSummary.kt        # budget + SQL aggregates for the list
 │   ├── BudgetDao.kt
 │   ├── ExpenseDao.kt
 │   ├── Category.kt             # entity; expenses.categoryId is ON DELETE SET NULL
 │   ├── CategoryDao.kt          # + per-category expense counts
-│   ├── BudgetDatabase.kt       # v1->v2 currencyCode, v2->v3 ratings, v3->v4 categories
+│   ├── CategorySpend.kt        # per-category spending for the "By category" card
+│   ├── BudgetDatabase.kt       # v1->v2 currencyCode, v2->v3 ratings, v3->v4 categories, v4->v5 closedAt
 │   ├── BudgetRepository.kt     # also export / replace-all for backups
 │   └── backup/
 │       ├── BackupModels.kt     # the JSON backup format
@@ -137,10 +158,11 @@ app/src/main/java/com/example/budgetapp/
 │   ├── StarRating.kt           # star input + read-only stars
 │   ├── CurrencyPickerDialog.kt # searchable currency list
 │   ├── LocalMoneyFormatter.kt  # the in-scope budget's currency
+│   ├── QuickAddShortcut.kt     # "Add expense" launcher shortcut, last-used budget
 │   └── theme/
 └── util/
     ├── MoneyFormatter.kt       # cents <-> text for one currency, + the currency list
-    └── Dates.kt
+    └── Dates.kt                # formatting + picked day -> timestamp
 ```
 
 ## Releasing
@@ -166,5 +188,5 @@ for `./gradlew assembleRelease`.
 ## Tests
 
 `./gradlew testDebugUnitTest` runs the JVM unit tests. They cover amount parsing and
-formatting across locales, the currency list, the backup JSON format (including categories and
-reading older backups) and how untitled expenses are shown.
+formatting across locales, the currency list, the backup JSON format (including categories, closed budgets and
+reading older backups), expense dates and the category breakdown and how untitled expenses are shown.

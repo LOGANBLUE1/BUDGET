@@ -14,40 +14,55 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Category
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.budgetapp.data.BudgetSummary
+import com.example.budgetapp.util.Dates
 import com.example.budgetapp.util.MoneyFormatter
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.shape.RoundedCornerShape
 
@@ -64,6 +79,38 @@ fun BudgetListScreen(
     var showCreate by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<BudgetSummary?>(null) }
     var deleting by remember { mutableStateOf<BudgetSummary?>(null) }
+    var addingTo by remember { mutableStateOf<BudgetSummary?>(null) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    // Page 0 (left) holds live budgets, page 1 (right) closed ones.
+    val pagerState = rememberPagerState(pageCount = { 2 })
+
+    fun closeBudget(summary: BudgetSummary) {
+        viewModel.closeBudget(summary)
+        scope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result = snackbarHostState.showSnackbar(
+                message = "Closed \"${summary.name}\"",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) viewModel.reopenBudget(summary)
+        }
+    }
+
+    fun reopenBudget(summary: BudgetSummary) {
+        viewModel.reopenBudget(summary)
+        scope.launch {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result = snackbarHostState.showSnackbar(
+                message = "Re-opened \"${summary.name}\"",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short,
+            )
+            if (result == SnackbarResult.ActionPerformed) viewModel.closeBudget(summary)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -79,36 +126,76 @@ fun BudgetListScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showCreate = true },
-                icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                text = { Text("New budget") },
-            )
+            // New budgets are always live, so the button only belongs on the Live tab.
+            if (pagerState.currentPage == 0) {
+                ExtendedFloatingActionButton(
+                    onClick = { showCreate = true },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
+                    text = { Text("New budget") },
+                )
+            }
         },
     ) { padding ->
-        if (!state.loading && state.budgets.isEmpty()) {
-            EmptyBudgets(modifier = Modifier.padding(padding))
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                if (state.budgets.isNotEmpty()) {
-                    item(key = "totals") { GrandTotalCard(state) }
-                }
-                items(state.budgets, key = { it.id }) { summary ->
-                    BudgetCard(
-                        summary = summary,
-                        onClick = { onOpenBudget(summary.id) },
-                        onEdit = { editing = summary },
-                        onDelete = { deleting = summary },
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+        ) {
+            TabRow(selectedTabIndex = pagerState.currentPage) {
+                listOf("Live" to state.live.size, "Closed" to state.closed.size)
+                    .forEachIndexed { index, (label, count) ->
+                        Tab(
+                            selected = pagerState.currentPage == index,
+                            onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                            text = { Text(if (state.loading) label else "$label ($count)") },
+                        )
+                    }
+            }
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                beyondViewportPageCount = 1,
+            ) { page ->
+                val closedTab = page == 1
+                val budgets = if (closedTab) state.closed else state.live
+                if (!state.loading && budgets.isEmpty()) {
+                    if (closedTab) EmptyClosedBudgets() else EmptyBudgets()
+                } else {
+                    BudgetPage(
+                        budgets = budgets,
+                        closedTab = closedTab,
+                        onOpenBudget = onOpenBudget,
+                        onEdit = { editing = it },
+                        onAddExpense = { addingTo = it },
+                        onClose = ::closeBudget,
+                        onReopen = ::reopenBudget,
+                        onDelete = { deleting = it },
                     )
                 }
             }
+        }
+    }
+
+    addingTo?.let { target ->
+        val formatter = remember(target.currencyCode) { MoneyFormatter(target.currencyCode) }
+        CompositionLocalProvider(LocalMoneyFormatter provides formatter) {
+            ExpenseEditorDialog(
+                title = "Add to ${target.name}",
+                confirmLabel = "Add",
+                categories = state.categories,
+                onCreateCategory = viewModel::createCategory,
+                onDismiss = { addingTo = null },
+                onConfirm = { title, cents, rating, categoryId, createdAt ->
+                    viewModel.addExpense(target, title, cents, rating, categoryId, createdAt)
+                    addingTo = null
+                    scope.launch {
+                        snackbarHostState.currentSnackbarData?.dismiss()
+                        snackbarHostState.showSnackbar("Added ${formatter.format(cents)} to ${target.name}")
+                    }
+                },
+            )
         }
     }
 
@@ -157,7 +244,46 @@ fun BudgetListScreen(
 }
 
 @Composable
-private fun GrandTotalCard(state: BudgetListUiState) {
+private fun BudgetPage(
+    budgets: List<BudgetSummary>,
+    closedTab: Boolean,
+    onOpenBudget: (Long) -> Unit,
+    onEdit: (BudgetSummary) -> Unit,
+    onAddExpense: (BudgetSummary) -> Unit,
+    onClose: (BudgetSummary) -> Unit,
+    onReopen: (BudgetSummary) -> Unit,
+    onDelete: (BudgetSummary) -> Unit,
+) {
+    val totals = remember(budgets) { currencyTotals(budgets) }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        if (totals.isNotEmpty()) {
+            item(key = "totals") {
+                GrandTotalCard(
+                    label = if (closedTab) "Spent in closed budgets" else "Total spent",
+                    totals = totals,
+                )
+            }
+        }
+        items(budgets, key = { it.id }) { summary ->
+            BudgetCard(
+                summary = summary,
+                onClick = { onOpenBudget(summary.id) },
+                onEdit = { onEdit(summary) },
+                onAddExpense = { onAddExpense(summary) },
+                onClose = { onClose(summary) },
+                onReopen = { onReopen(summary) },
+                onDelete = { onDelete(summary) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun GrandTotalCard(label: String, totals: List<CurrencyTotal>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -166,15 +292,15 @@ private fun GrandTotalCard(state: BudgetListUiState) {
         ),
     ) {
         Column(Modifier.padding(20.dp)) {
-            Text("Total spent", style = MaterialTheme.typography.labelLarge)
+            Text(label, style = MaterialTheme.typography.labelLarge)
             Spacer(Modifier.height(8.dp))
 
-            state.totals.forEachIndexed { index, total ->
+            totals.forEachIndexed { index, total ->
                 if (index > 0) Spacer(Modifier.height(12.dp))
                 val formatter = remember(total.currencyCode) { MoneyFormatter(total.currencyCode) }
                 Text(
                     text = formatter.format(total.spentCents),
-                    style = if (state.totals.size == 1) MaterialTheme.typography.headlineMedium
+                    style = if (totals.size == 1) MaterialTheme.typography.headlineMedium
                     else MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -194,6 +320,9 @@ private fun BudgetCard(
     summary: BudgetSummary,
     onClick: () -> Unit,
     onEdit: () -> Unit,
+    onAddExpense: () -> Unit,
+    onClose: () -> Unit,
+    onReopen: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -219,9 +348,21 @@ private fun BudgetCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    summary.closedAt?.let { closedAt ->
+                        Text(
+                            text = "Closed ${Dates.format(closedAt)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     if (summary.rating != null) {
                         Spacer(Modifier.height(4.dp))
                         StarRatingDisplay(rating = summary.rating, size = 16.dp)
+                    }
+                }
+                if (!summary.isClosed) {
+                    FilledTonalIconButton(onClick = onAddExpense) {
+                        Icon(Icons.Default.Add, contentDescription = "Add expense to ${summary.name}")
                     }
                 }
                 Box {
@@ -229,13 +370,30 @@ private fun BudgetCard(
                         Icon(Icons.Default.MoreVert, contentDescription = "Budget options")
                     }
                     DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Edit") },
-                            onClick = {
-                                menuOpen = false
-                                onEdit()
-                            },
-                        )
+                        if (summary.isClosed) {
+                            DropdownMenuItem(
+                                text = { Text("Re-open") },
+                                onClick = {
+                                    menuOpen = false
+                                    onReopen()
+                                },
+                            )
+                        } else {
+                            DropdownMenuItem(
+                                text = { Text("Edit") },
+                                onClick = {
+                                    menuOpen = false
+                                    onEdit()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Close") },
+                                onClick = {
+                                    menuOpen = false
+                                    onClose()
+                                },
+                            )
+                        }
                         DropdownMenuItem(
                             text = { Text("Delete") },
                             onClick = {
@@ -298,6 +456,31 @@ private fun BudgetCard(
 
 @Composable
 private fun EmptyBudgets(modifier: Modifier = Modifier) {
+    EmptyState(
+        icon = Icons.Outlined.AccountBalanceWallet,
+        title = "No live budgets",
+        message = "Create a budget, then add expenses to it to watch the total add up.",
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun EmptyClosedBudgets(modifier: Modifier = Modifier) {
+    EmptyState(
+        icon = Icons.Outlined.Inventory2,
+        title = "No closed budgets",
+        message = "Close a budget from its ⋮ menu when you're done with it. It moves here, and you can re-open it any time.",
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun EmptyState(
+    icon: ImageVector,
+    title: String,
+    message: String,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -306,16 +489,17 @@ private fun EmptyBudgets(modifier: Modifier = Modifier) {
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(
-            imageVector = Icons.Outlined.AccountBalanceWallet,
+            imageVector = icon,
             contentDescription = null,
             modifier = Modifier.size(72.dp),
             tint = MaterialTheme.colorScheme.primary,
         )
         Spacer(Modifier.height(16.dp))
-        Text("No budgets yet", style = MaterialTheme.typography.titleLarge)
+        Text(title, style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(8.dp))
         Text(
-            text = "Create a budget, then add expenses to it to watch the total add up.",
+            text = message,
+            textAlign = TextAlign.Center,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
