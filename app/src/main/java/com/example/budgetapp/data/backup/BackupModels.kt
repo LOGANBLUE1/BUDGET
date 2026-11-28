@@ -57,6 +57,8 @@ data class BudgetDto(
     val currencyCode: String = Budget.DEFAULT_CURRENCY,
     val createdAt: Long,
     val rating: Int? = null,
+    /** Added in schema v5; older backups have none, so their budgets restore as live. */
+    val closedAt: Long? = null,
 ) {
     fun toEntity() = Budget(
         id = id,
@@ -65,10 +67,12 @@ data class BudgetDto(
         currencyCode = currencyCode,
         createdAt = createdAt,
         rating = rating,
+        closedAt = closedAt,
     )
 
     companion object {
-        fun from(b: Budget) = BudgetDto(b.id, b.name, b.limitCents, b.currencyCode, b.createdAt, b.rating)
+        fun from(b: Budget) =
+            BudgetDto(b.id, b.name, b.limitCents, b.currencyCode, b.createdAt, b.rating, b.closedAt)
     }
 }
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.0
+
+- Close a budget when you're done with it, and re-open it later. Budgets are split into
+  **Live** and **Closed** tabs; a closed budget is read-only.
+- Expenses get a date (defaults to today; pick any past day). Rows show the date only.
+- **By category** card inside a budget (collapsible); tap a category to filter the expense list
+- Quick add: a **+** on each live budget card, and an **Add expense** launcher shortcut
+  for the last-used budget. The number keyboard opens with the add dialog.
+- **Export / Import** the backup JSON to a file from Backup & sync (import replaces everything)
+- Database schema v4 → v5 (`budgets.closedAt`); the backup format gains `closedAt`
+- Debug builds install as a separate app (`com.example.budgetapp.debug`)
+
+Full notes: [release-notes/v1.2.0.md](release-notes/v1.2.0.md)
+
 ## 1.1.0
 
 - Expense dialog asks for the amount first; the expense name is now optional

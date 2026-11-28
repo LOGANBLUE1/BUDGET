@@ -26,17 +26,25 @@ class BudgetRepository(
 
     suspend fun deleteBudget(budget: Budget) = budgetDao.delete(budget)
 
+    suspend fun getBudget(id: Long): Budget? = budgetDao.getById(id)
+
+    suspend fun closeBudget(id: Long, now: Long = System.currentTimeMillis()) = budgetDao.setClosedAt(id, now)
+
+    suspend fun reopenBudget(id: Long) = budgetDao.setClosedAt(id, null)
+
     suspend fun addExpense(
         budgetId: Long,
         title: String,
         amountCents: Long,
         rating: Int?,
         categoryId: Long?,
+        createdAt: Long = System.currentTimeMillis(),
     ) = expenseDao.insert(
         Expense(
             budgetId = budgetId,
             title = title,
             amountCents = amountCents,
+            createdAt = createdAt,
             rating = rating,
             categoryId = categoryId,
         )

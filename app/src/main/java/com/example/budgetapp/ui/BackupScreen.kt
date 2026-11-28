@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.CloudDone
 import androidx.compose.material.icons.outlined.CloudOff
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -48,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.budgetapp.util.Dates
+import java.time.LocalDate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,6 +72,13 @@ fun BackupScreen(
             consentLauncher.launch(IntentSenderRequest.Builder(sender).build())
         }
     }
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri -> uri?.let(viewModel::exportToFile) }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> uri?.let(viewModel::readImportFile) }
+
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { snackbar.showSnackbar(it) }
     }
@@ -212,7 +221,26 @@ fun BackupScreen(
                     modifier = Modifier.align(Alignment.CenterHorizontally),
                 ) { Text("Sign out") }
             }
+
+            FileCard(
+                busy = state.busy,
+                onExport = { exportLauncher.launch("budget-backup-${LocalDate.now()}.json") },
+                onImport = { importLauncher.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) },
+            )
         }
+    }
+
+    state.pendingImport?.let { pending ->
+        ConfirmDialog(
+            title = "Import this backup?",
+            message = "It has ${pending.budgetCount} budget" + (if (pending.budgetCount == 1) "" else "s") +
+                " and ${pending.expenseCount} expense" + (if (pending.expenseCount == 1) "" else "s") +
+                ". Everything on this phone will be replaced with it." +
+                if (sync.signedIn && sync.syncEnabled) " Your Drive backup will be updated to match." else "",
+            confirmLabel = "Import",
+            onDismiss = viewModel::cancelImport,
+            onConfirm = viewModel::confirmImport,
+        )
     }
 
     if (confirmRestore) {
@@ -252,5 +280,47 @@ fun BackupScreen(
             onDismiss = viewModel::declineRestoreOffer,
             onConfirm = viewModel::acceptRestoreOffer,
         )
+    }
+}
+
+@Composable
+private fun FileCard(busy: Boolean, onExport: () -> Unit, onImport: () -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Outlined.Description,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp),
+                )
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = "Backup file",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = "Save everything to a file you choose (the same format as the Drive backup), " +
+                    "or load one. Loading a file replaces everything on this phone. No sign-in needed.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = onExport,
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Export") }
+                OutlinedButton(
+                    onClick = onImport,
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Import") }
+            }
+        }
     }
 }

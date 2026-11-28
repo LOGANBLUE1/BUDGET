@@ -8,6 +8,7 @@ data class BudgetSummary(
     val currencyCode: String,
     val createdAt: Long,
     val rating: Int?,
+    val closedAt: Long?,
     val spentCents: Long,
     val expenseCount: Int,
 ) {
@@ -21,6 +22,8 @@ data class BudgetSummary(
 
     val isOverBudget: Boolean get() = limitCents != null && spentCents > limitCents
 
+    val isClosed: Boolean get() = closedAt != null
+
     fun toBudget(): Budget = Budget(
         id = id,
         name = name,
@@ -28,5 +31,6 @@ data class BudgetSummary(
         currencyCode = currencyCode,
         createdAt = createdAt,
         rating = rating,
+        closedAt = closedAt,
     )
 }

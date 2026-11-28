@@ -23,8 +23,8 @@ android {
         applicationId = "com.example.budgetapp"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
     }
 
     signingConfigs {
@@ -39,6 +39,13 @@ android {
     }
 
     buildTypes {
+        // A separate package, so a debug build installs next to the release app instead of
+        // needing it uninstalled (which would delete its data). Google sign-in won't work in
+        // it unless an OAuth client is registered for com.example.budgetapp.debug.
+        debug {
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

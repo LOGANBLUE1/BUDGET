@@ -13,6 +13,7 @@ class BackupFileTest {
     private val budgets = listOf(
         Budget(id = 1, name = "Goa trip", limitCents = 50_000_00, currencyCode = "INR", createdAt = 1_000, rating = 4),
         Budget(id = 2, name = "Groceries", limitCents = null, currencyCode = "EUR", createdAt = 2_000),
+        Budget(id = 3, name = "Paris 2025", currencyCode = "EUR", createdAt = 3_000, closedAt = 4_000),
     )
     private val expenses = listOf(
         Expense(id = 10, budgetId = 1, title = "Hotel", amountCents = 12_000_00, createdAt = 1_500, rating = 5),
@@ -58,5 +59,28 @@ class BackupFileTest {
         assertEquals("Tea", restored.expenses.single().title)
         assertNull(restored.expenses.single().categoryId)
         assertTrue(restored.categories.isEmpty())
+    }
+
+    @Test
+    fun `keeps whether a budget is closed`() {
+        val restored = BackupFile.fromJson(BackupFile.of(budgets, expenses).toJson())
+
+        assertEquals(4_000L, restored.budgets.single { it.id == 3L }.closedAt)
+        assertTrue(restored.budgets.single { it.id == 3L }.toEntity().isClosed)
+        assertNull(restored.budgets.single { it.id == 1L }.closedAt)
+    }
+
+    @Test
+    fun `budgets from a backup written before closing existed are live`() {
+        val old = """
+            {"version":1,"exportedAt":5,
+             "budgets":[{"id":1,"name":"Old","currencyCode":"INR","createdAt":1,"rating":3}],
+             "expenses":[]}
+        """.trimIndent()
+
+        val budget = BackupFile.fromJson(old).budgets.single().toEntity()
+
+        assertNull(budget.closedAt)
+        assertEquals(false, budget.isClosed)
     }
 }

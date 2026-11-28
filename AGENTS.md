@@ -13,8 +13,8 @@ It works fully offline, with an optional Google Drive backup.
 | Language / UI | Kotlin, Jetpack Compose, Material 3 |
 | Package / applicationId | `com.example.budgetapp` |
 | SDK | minSdk 26, targetSdk / compileSdk 35, JDK 17 |
-| Storage | Room, **schema v4** (`data/BudgetDatabase.kt`) |
-| Current version | **1.1.0** (versionCode 2), released on GitHub |
+| Storage | Room, **schema v5** (`data/BudgetDatabase.kt`) |
+| Current version | **1.2.0** (versionCode 3) |
 
 ## Where things are
 
@@ -37,7 +37,9 @@ All source is under `app/src/main/java/com/example/budgetapp/`.
 - `ui/`: one `XScreen.kt` + `XViewModel.kt` per screen (BudgetList, BudgetDetail, Backup,
   Categories), plus `Navigation.kt`, `Dialogs.kt`, `StarRating.kt`, `CategoryPicker.kt` and
   `CurrencyPickerDialog.kt`.
-- `util/`: `MoneyFormatter.kt`, which is the only place text becomes money and back.
+- `util/`: `MoneyFormatter.kt`, which is the only place text becomes money and back;
+  and `Dates.kt` (incl. how a picked day becomes a timestamp).
+- `ui/QuickAddShortcut.kt`: the "Add expense" launcher shortcut and the last-used budget.
 - Tests are in `app/src/test/` (JVM only).
 - `.github/workflows/release.yml` is the release pipeline.
 
@@ -46,6 +48,10 @@ All source is under `app/src/main/java/com/example/budgetapp/`.
 - **Money** is stored as whole cents in a `Long`, and is parsed and formatted only
   through `MoneyFormatter`. No floating point.
 - **A budget's currency is fixed** at creation; every expense in it uses that currency.
+- **Closed budgets** have `closedAt` set (null = live). They show on the Closed tab and are
+  read-only (no adding, editing or deleting expenses, no editing the budget) until re-opened.
+- **Expense dates:** only the day is chosen. `Dates.timestampForDay` keeps the original
+  time if the day is unchanged, uses now for today, and noon for other days.
 - **Optional fields:** an expense needs only an amount. Its name (`""` = none, shown as
   *Expense*), rating (1–5 or null) and category (nullable FK, `ON DELETE SET NULL`) are
   optional. A budget's limit and rating are optional.
@@ -64,6 +70,11 @@ All source is under `app/src/main/java/com/example/budgetapp/`.
 ./gradlew testDebugUnitTest   # JVM unit tests
 ./gradlew assembleDebug       # debug APK
 ```
+
+The owner's Mac has the Android SDK in `~/Library/Android/sdk` (`local.properties`, gitignored,
+points at it) and `adb` from Homebrew; their phone is usually connected over USB. The debug
+build has `applicationIdSuffix = ".debug"`, so `adb install` puts it next to the owner's
+release app. **Never uninstall the release app** to test: that deletes their real data.
 
 **Cloud sessions can't build Android.** Their network blocks `dl.google.com`, which
 serves the Android SDK and Google Maven. Pure-Kotlin code (entities, `BackupModels`, the
@@ -101,46 +112,14 @@ release from 1.1.0 on must use the current key.
 | --- | --- |
 | 1.0.0 | Budgets, expenses, per-budget currency, undo, live totals |
 | 1.1.0 | Amount-first expenses with an optional name, ★ ratings, categories, Drive backup; new signing key; release workflow |
-
-## Open task: move the owner's 1.0 data into 1.1.0
-
-The owner's phone still has **1.0 with real data**. 1.1.0 can't install over it (the
-signing key differs), and the data can't be read directly: 1.0 is a non-debuggable
-release build targeting API 35, so `run-as` fails and `adb backup` gets nothing. The
-agreed method is to read 1.0's screens and type the data into 1.1.0 over **adb**.
-
-This needs a session running **on the owner's computer**, with `adb` installed and the
-phone connected over USB with USB debugging allowed. A cloud session can't do it.
-
-1. **Read 1.0, without changing anything.**
-   - Use `adb shell uiautomator dump` + `adb pull` and scroll with `adb shell input swipe`.
-   - On the budget list, read each budget's name, currency, limit and spent.
-   - Open each budget and read every expense: title, amount, date.
-   - Never tap edit, delete or anything else that changes data.
-2. **Check.** For each budget, the parsed expenses must add up to its "Spent" total and
-   match its expense count. Stop and report any mismatch.
-3. **Save.** Write a JSON file and a readable Markdown file with everything, and show
-   them to the owner.
-4. **Wait for the owner** to uninstall 1.0 and install `budget-v1.1.0.apk` from the GitHub
-   release. **Never uninstall anything yourself.**
-5. **Re-create the data in 1.1.0** through its UI.
-   - For each budget: New budget, then name, currency (search the picker), and limit.
-   - For each expense, **oldest first**: Add expense, then amount, then name.
-   - Find fields and buttons from uiautomator dumps, not fixed coordinates.
-   - Type with `adb shell input text`, using `%s` for spaces.
-6. **Check again.** After each budget, its total and count must match the export.
-7. **Report back:**
-   - Expenses copied this way show today's date; the originals are in the export file.
-   - List any names that couldn't be typed (non-ASCII) so the owner can fix them by hand.
-   - Remind the owner to turn on **Backup & sync** in 1.1.0.
-   - Remind the owner to turn off USB debugging afterwards.
-
-When this is done, delete this section.
+| 1.2.0 | Close / re-open budgets (Live and Closed tabs), expense dates, by-category card + filter, quick add (+ on cards, launcher shortcut), file export/import |
 
 ## Ideas not started
 
-- Spending-by-category breakdown and a category filter in a budget
-- An expense date field (expenses currently always get "now")
-- Import/export to a file, which would also have made the 1.0 migration trivial
+- Search across expenses, and sort options inside a budget
+- A home-screen widget
+- Recurring budgets (e.g. monthly). A manual "Start next period" was built and dropped
+  before 1.2.0 at the owner's request
+- CSV export for spreadsheets
 - A real applicationId (not `com.example.*`) before any Play Store publishing. Changing
   it means a new Google OAuth client.
