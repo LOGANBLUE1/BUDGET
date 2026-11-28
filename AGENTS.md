@@ -102,45 +102,10 @@ release from 1.1.0 on must use the current key.
 | 1.0.0 | Budgets, expenses, per-budget currency, undo, live totals |
 | 1.1.0 | Amount-first expenses with an optional name, ★ ratings, categories, Drive backup; new signing key; release workflow |
 
-## Open task: move the owner's 1.0 data into 1.1.0
-
-The owner's phone still has **1.0 with real data**. 1.1.0 can't install over it (the
-signing key differs), and the data can't be read directly: 1.0 is a non-debuggable
-release build targeting API 35, so `run-as` fails and `adb backup` gets nothing. The
-agreed method is to read 1.0's screens and type the data into 1.1.0 over **adb**.
-
-This needs a session running **on the owner's computer**, with `adb` installed and the
-phone connected over USB with USB debugging allowed. A cloud session can't do it.
-
-1. **Read 1.0, without changing anything.**
-   - Use `adb shell uiautomator dump` + `adb pull` and scroll with `adb shell input swipe`.
-   - On the budget list, read each budget's name, currency, limit and spent.
-   - Open each budget and read every expense: title, amount, date.
-   - Never tap edit, delete or anything else that changes data.
-2. **Check.** For each budget, the parsed expenses must add up to its "Spent" total and
-   match its expense count. Stop and report any mismatch.
-3. **Save.** Write a JSON file and a readable Markdown file with everything, and show
-   them to the owner.
-4. **Wait for the owner** to uninstall 1.0 and install `budget-v1.1.0.apk` from the GitHub
-   release. **Never uninstall anything yourself.**
-5. **Re-create the data in 1.1.0** through its UI.
-   - For each budget: New budget, then name, currency (search the picker), and limit.
-   - For each expense, **oldest first**: Add expense, then amount, then name.
-   - Find fields and buttons from uiautomator dumps, not fixed coordinates.
-   - Type with `adb shell input text`, using `%s` for spaces.
-6. **Check again.** After each budget, its total and count must match the export.
-7. **Report back:**
-   - Expenses copied this way show today's date; the originals are in the export file.
-   - List any names that couldn't be typed (non-ASCII) so the owner can fix them by hand.
-   - Remind the owner to turn on **Backup & sync** in 1.1.0.
-   - Remind the owner to turn off USB debugging afterwards.
-
-When this is done, delete this section.
-
 ## Ideas not started
 
 - Spending-by-category breakdown and a category filter in a budget
 - An expense date field (expenses currently always get "now")
-- Import/export to a file, which would also have made the 1.0 migration trivial
+- Import/export to a file
 - A real applicationId (not `com.example.*`) before any Play Store publishing. Changing
   it means a new Google OAuth client.
