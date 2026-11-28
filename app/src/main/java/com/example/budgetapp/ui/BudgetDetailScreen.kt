@@ -1,7 +1,10 @@
 package com.example.budgetapp.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -96,6 +99,7 @@ fun BudgetDetailScreen(
 
     // From the launcher shortcut: open Add expense once, as soon as the budget has loaded.
     var autoAddDone by rememberSaveable { mutableStateOf(false) }
+    var breakdownExpanded by rememberSaveable { mutableStateOf(true) }
     LaunchedEffect(state.budget) {
         val budget = state.budget ?: return@LaunchedEffect
         if (viewModel.openAddExpense && !autoAddDone) {
@@ -207,6 +211,8 @@ fun BudgetDetailScreen(
                         CategoryBreakdownCard(
                             breakdown = state.breakdown,
                             selected = state.filter,
+                            expanded = breakdownExpanded,
+                            onToggleExpanded = { breakdownExpanded = !breakdownExpanded },
                             onSelect = viewModel::toggleFilter,
                         )
                     }
@@ -323,67 +329,89 @@ fun BudgetDetailScreen(
 private fun CategoryBreakdownCard(
     breakdown: List<CategorySpend>,
     selected: CategoryFilter?,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
     onSelect: (Long?) -> Unit,
 ) {
     val formatter = LocalMoneyFormatter.current
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(vertical = 12.dp)) {
-            Text(
-                text = "By category",
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-            Text(
-                text = "Tap one to show only its expenses",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp),
-            )
-            Spacer(Modifier.height(4.dp))
-            breakdown.forEach { line ->
-                val isSelected = selected != null && selected.categoryId == line.categoryId
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelect(line.categoryId) }
-                        .background(
-                            if (isSelected) MaterialTheme.colorScheme.secondaryContainer
-                            else Color.Transparent
-                        )
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = line.name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                            fontStyle = if (line.categoryId == null) FontStyle.Italic else FontStyle.Normal,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Text(
-                            text = "${(line.share * 100).roundToInt()}%",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.width(12.dp))
-                        Text(
-                            text = formatter.format(line.spentCents),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                        )
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    LinearProgressIndicator(
-                        progress = { line.share },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp)),
-                        drawStopIndicator = {},
-                        gapSize = 0.dp,
+        Column(Modifier.padding(bottom = if (expanded) 12.dp else 0.dp)) {
+            // Tapping the header shows or hides the category lines.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggleExpanded)
+                    .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(text = "By category", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = if (expanded) "Tap one to show only its expenses"
+                        else breakdown.first().let { top ->
+                            "${breakdown.size} categor${if (breakdown.size == 1) "y" else "ies"} · " +
+                                "most on ${top.name} (${(top.share * 100).roundToInt()}%)"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse categories" else "Expand categories",
+                    modifier = Modifier.padding(12.dp),
+                )
+            }
+            AnimatedVisibility(visible = expanded) {
+                Column {
+                    breakdown.forEach { line ->
+                        val isSelected = selected != null && selected.categoryId == line.categoryId
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelect(line.categoryId) }
+                                .background(
+                                    if (isSelected) MaterialTheme.colorScheme.secondaryContainer
+                                    else Color.Transparent
+                                )
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = line.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                    fontStyle = if (line.categoryId == null) FontStyle.Italic else FontStyle.Normal,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                Text(
+                                    text = "${(line.share * 100).roundToInt()}%",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.width(12.dp))
+                                Text(
+                                    text = formatter.format(line.spentCents),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
+                            Spacer(Modifier.height(4.dp))
+                            LinearProgressIndicator(
+                                progress = { line.share },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(6.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                drawStopIndicator = {},
+                                gapSize = 0.dp,
+                            )
+                        }
+                    }
                 }
             }
         }

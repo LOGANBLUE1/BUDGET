@@ -5,7 +5,7 @@
 - Close a budget when you're done with it, and re-open it later. Budgets are split into
   **Live** and **Closed** tabs; a closed budget is read-only.
 - Expenses get a date (defaults to today; pick any past day). Rows show the date only.
-- **By category** card inside a budget; tap a category to filter the expense list
+- **By category** card inside a budget (collapsible); tap a category to filter the expense list
 - Quick add: a **+** on each live budget card, and an **Add expense** launcher shortcut
   for the last-used budget. The number keyboard opens with the add dialog.
 - **Export / Import** the backup JSON to a file from Backup & sync (import replaces everything)

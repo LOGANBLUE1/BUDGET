@@ -26,7 +26,7 @@ account are needed. An **optional** Google Drive backup keeps a copy in your own
   is the only required field. A name, a category, a 1–5 ★ rating and a **date** are optional.
   The date is today unless you pick an earlier day. An expense without a name shows as *Expense*.
 - **By category** card: what share of the budget went to each category. Tap one to show only
-  its expenses; **Show all** clears the filter.
+  its expenses; **Show all** clears the filter. Tap the card's header to collapse or expand it.
 - Each expense row shows its category tag and rating, if it has them
 - Tap any expense to edit it, or delete it from the row / the edit dialog
 - Deleting an expense shows an **Undo** snackbar
